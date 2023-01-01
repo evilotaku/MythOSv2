@@ -15,20 +15,22 @@ using Unity.Services.Vivox;
 using VivoxUnity;
 using ParrelSync;
 using Unity.Networking.Transport.Relay;
+using UnityEngine.SceneManagement;
 
 public class NetworkConnectionManager : NetworkBehaviour
 {
-    public bool VoiceChat, DebugHost;
-    int MaxConnections = 100;
-    string RelayCode;
-    RelayAllocationId AllocationID;
-    Lobby lobby;
-    ILoginSession LoginSession;
+    public bool VoiceChat, Test;
+    int _maxConnections = 100;
+    string _relayCode;
+    RelayAllocationId _allocationID;
+    Lobby _lobby;
+    ILoginSession _loginSession;
 
 
     // Start is called before the first frame update
     async void Start()
     {
+        NetworkManager.OnServerStarted += OnServerStart;
         var options = new InitializationOptions();
 #if UNITY_EDITOR
         if (ClonesManager.IsClone())
@@ -66,16 +68,16 @@ public class NetworkConnectionManager : NetworkBehaviour
 
             options.Player = new Player();
 
-            lobby = await Lobbies.Instance.QuickJoinLobbyAsync(options);
-            print($"Joined Lobby: {lobby.Name}");
-            RelayCode = lobby.Data["RelayCode"].Value;            
+            _lobby = await Lobbies.Instance.QuickJoinLobbyAsync(options);
+            print($"Joined Lobby: {_lobby.Name}");
+            _relayCode = _lobby.Data["RelayCode"].Value;            
             StartClient();
 
         }
         catch
         {
             print("No Lobbies Found. Creating New Lobby");
-            StartCoroutine(StartHost());
+            StartHost();
         }
 
         if(VoiceChat)
@@ -90,7 +92,7 @@ public class NetworkConnectionManager : NetworkBehaviour
     async public void StartClient()
     {
         // Populate RelayJoinCode beforehand through the UI
-        var clientRelayUtilityTask = JoinRelayServerFromJoinCode(RelayCode);
+        var clientRelayUtilityTask = JoinRelayServerFromJoinCode(_relayCode);
 
         while (!clientRelayUtilityTask.IsCompleted)
         {
@@ -109,7 +111,7 @@ public class NetworkConnectionManager : NetworkBehaviour
         {
             AllocationId = clientRelayUtilityTask.Result.AllocationId.ToString()
         };        
-        await Lobbies.Instance.UpdatePlayerAsync(lobby.Id, AuthenticationService.Instance.PlayerId, options);
+        await Lobbies.Instance.UpdatePlayerAsync(_lobby.Id, AuthenticationService.Instance.PlayerId, options);
         
         // When connecting as a client to a Relay server, connectionData and hostConnectionData are different.
         NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayData);
@@ -139,18 +141,28 @@ public class NetworkConnectionManager : NetworkBehaviour
         return new RelayServerData(allocation, "dtls");
     }
 
-
-    public IEnumerator StartHost()
+    public void OnServerStart()
     {
-        var serverRelayUtilityTask = AllocateRelayServerAndGetJoinCode(MaxConnections);
+        print("Server Started...");
+        NetworkManager.SceneManager.LoadScene("SampleScene", LoadSceneMode.Single);
+    }
+
+    public async void StartHost()
+    {
+        if(Test)
+        {
+            NetworkManager.Singleton.StartHost();            
+            return;
+        }
+        var serverRelayUtilityTask = AllocateRelayServerAndGetJoinCode(_maxConnections);
         while (!serverRelayUtilityTask.IsCompleted)
         {
-            yield return null;
+            await Task.Yield();
         }
         if (serverRelayUtilityTask.IsFaulted)
         {
             Debug.LogError("Exception thrown when attempting to start Relay Server. Server not started. Exception: " + serverRelayUtilityTask.Exception.Message);
-            yield break;
+            //yield break;
         }
 
         var (relayData, joinCode) = serverRelayUtilityTask.Result;
@@ -163,7 +175,7 @@ public class NetworkConnectionManager : NetworkBehaviour
         print($"Starting Server on {relayData.Endpoint.Address} : {relayData.Endpoint.Port}");
         NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayData);
         NetworkManager.Singleton.StartHost();
-        yield return null;
+        //yield return null;
     }
 
     public static async Task<(RelayServerData, string)> AllocateRelayServerAndGetJoinCode(int maxConnections, string region = null)
@@ -215,19 +227,19 @@ public class NetworkConnectionManager : NetworkBehaviour
                 {
                         "Relay Allocation", new DataObject(
                         DataObject.VisibilityOptions.Member,
-                        AllocationID.ToString(),
+                        _allocationID.ToString(),
                         DataObject.IndexOptions.S2
                     )
                 }
             };
-            lobby = await Lobbies.Instance.CreateLobbyAsync("Main Lobby", MaxConnections, options);
+            _lobby = await Lobbies.Instance.CreateLobbyAsync("Main Lobby", _maxConnections, options);
 
             var playerOptions = new UpdatePlayerOptions();
             playerOptions.AllocationId = allocationId.ToString();
-            await Lobbies.Instance.UpdatePlayerAsync(lobby.Id, AuthenticationService.Instance.PlayerId, playerOptions);
+            await Lobbies.Instance.UpdatePlayerAsync(_lobby.Id, AuthenticationService.Instance.PlayerId, playerOptions);
 
-            print($"Lobby {lobby.Id} is created with Lobby code {lobby.LobbyCode}");
-            StartCoroutine(HearbeatLobby(lobby.Id, 15));
+            print($"Lobby {_lobby.Id} is created with Lobby code {_lobby.LobbyCode}");
+            StartCoroutine(HearbeatLobby(_lobby.Id, 15));
         }
         catch (LobbyServiceException e)
         {
@@ -249,11 +261,11 @@ public class NetworkConnectionManager : NetworkBehaviour
 
     public void JoinVivoxChannel(string channelName, ChannelType channelType, bool connectAudio, bool connectText, bool transmissionSwitch = true, Channel3DProperties properties = null)
     {
-        if (LoginSession.State == LoginState.LoggedIn)
+        if (_loginSession.State == LoginState.LoggedIn)
         {
             Channel channel = new Channel(channelName, channelType, properties);
 
-            IChannelSession channelSession = LoginSession.GetChannelSession(channel);
+            IChannelSession channelSession = _loginSession.GetChannelSession(channel);
 
             channelSession.BeginConnect(connectAudio, connectText, transmissionSwitch, channelSession.GetConnectToken(), ar =>
             {
@@ -280,14 +292,14 @@ public class NetworkConnectionManager : NetworkBehaviour
         bool connectAudio = true;
         bool connectText = true;
 
-        LoginSession = VivoxService.Instance.Client.GetLoginSession(account);
-        LoginSession.PropertyChanged += LoginSession_PropertyChanged;
+        _loginSession = VivoxService.Instance.Client.GetLoginSession(account);
+        _loginSession.PropertyChanged += LoginSession_PropertyChanged;
 
-        LoginSession.BeginLogin(LoginSession.GetLoginToken(), SubscriptionMode.Accept, null, null, null, ar =>
+        _loginSession.BeginLogin(_loginSession.GetLoginToken(), SubscriptionMode.Accept, null, null, null, ar =>
         {
             try
             {
-                LoginSession.EndLogin(ar);
+                _loginSession.EndLogin(ar);
             }
             catch (Exception e)
             {
@@ -330,11 +342,11 @@ public class NetworkConnectionManager : NetworkBehaviour
 
     public void LogOff()
     {
-        LoginSession?.Logout();
+        _loginSession?.Logout();
         VivoxService.Instance.Client.Uninitialize();        
-        if (lobby == null) return;
+        if (_lobby == null) return;
         if(NetworkManager.Singleton.IsHost)
-            Lobbies.Instance.DeleteLobbyAsync(lobby.Id);
+            Lobbies.Instance.DeleteLobbyAsync(_lobby.Id);
         NetworkManager.Singleton.Shutdown();
     }
 
