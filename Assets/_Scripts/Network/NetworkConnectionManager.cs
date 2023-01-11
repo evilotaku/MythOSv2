@@ -30,7 +30,7 @@ public class NetworkConnectionManager : NetworkBehaviour
     // Start is called before the first frame update
     async void Start()
     {
-        NetworkManager.OnServerStarted += OnServerStart;
+        //NetworkManager.OnServerStarted += OnServerStart;
         var options = new InitializationOptions();
 #if UNITY_EDITOR
         if (ClonesManager.IsClone())
@@ -43,10 +43,15 @@ public class NetworkConnectionManager : NetworkBehaviour
 
         
         await UnityServices.InitializeAsync(options);
+        AuthenticationService.Instance.SignOut(true);
         await AuthenticationService.Instance.SignInAnonymouslyAsync();
 
         print($"Logged in as {AuthenticationService.Instance.PlayerId} ");
         VivoxService.Instance.Initialize();
+
+        Debug.Log($"Is SignedIn: {AuthenticationService.Instance.IsSignedIn}");
+        Debug.Log($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
+        Debug.Log($"Is Expired: {AuthenticationService.Instance.IsExpired}");
 
 
     }
@@ -55,6 +60,10 @@ public class NetworkConnectionManager : NetworkBehaviour
     [ContextMenu("Join or Create Lobby")]
     async public void JoinOrCreateLobby()
     {
+        if(!AuthenticationService.Instance.IsSignedIn)
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+
+
         try
         {
             QuickJoinLobbyOptions options = new();
@@ -67,12 +76,11 @@ public class NetworkConnectionManager : NetworkBehaviour
             };
 
             options.Player = new Player();
-
+            Debug.Log($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
             _lobby = await Lobbies.Instance.QuickJoinLobbyAsync(options);
             print($"Joined Lobby: {_lobby.Name}");
             _relayCode = _lobby.Data["RelayCode"].Value;            
             StartClient();
-
         }
         catch
         {
@@ -88,10 +96,15 @@ public class NetworkConnectionManager : NetworkBehaviour
 
 
     }
-
+   
     async public void StartClient()
     {
-        // Populate RelayJoinCode beforehand through the UI
+        if(Test)
+        {
+            NetworkManager.Singleton.StartClient();
+            return;
+        }
+        
         var clientRelayUtilityTask = JoinRelayServerFromJoinCode(_relayCode);
 
         while (!clientRelayUtilityTask.IsCompleted)
@@ -247,6 +260,28 @@ public class NetworkConnectionManager : NetworkBehaviour
         }
     }
 
+    [ContextMenu("Find Lobbies")]
+    async void FindLobbies()
+    {
+        try
+        {          
+            if(!AuthenticationService.Instance.IsAuthorized)
+            {
+                await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            }
+
+            print($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
+            var lobbies = await Lobbies.Instance.QueryLobbiesAsync();
+            foreach (var lobby in lobbies.Results)
+            {
+                print($"Found Lobby: {lobby.Name} with {lobby.Players.Count} Players in it");
+            }
+        }catch(LobbyServiceException error)
+        {
+            print($"Error Finding Lobby: {error.Message}");
+        }
+    }
+
     IEnumerator HearbeatLobby(string lobbyId, float waitTimeinSecs)
     {
         var delay = new WaitForSecondsRealtime(waitTimeinSecs);
@@ -340,19 +375,46 @@ public class NetworkConnectionManager : NetworkBehaviour
 
     }
 
-    public void LogOff()
+    [ContextMenu("Log Out")]
+    public async void LogOff()
     {
+        print("[NetworkConnectionManager] Ending Lobby Heartbeat...");
+        StopAllCoroutines();
         _loginSession?.Logout();
-        VivoxService.Instance.Client.Uninitialize();        
+        VivoxService.Instance?.Client.Uninitialize();
+        print("[NetworkConnectionManager] Logged out of Vivox...");
         if (_lobby == null) return;
         if(NetworkManager.Singleton.IsHost)
-            Lobbies.Instance.DeleteLobbyAsync(_lobby.Id);
-        NetworkManager.Singleton.Shutdown();
+        {
+            await Lobbies.Instance.DeleteLobbyAsync(_lobby.Id);
+            print("[NetworkConnectionManager] Deleted Lobby...");
+        }            
+        else
+        {
+            try
+            {
+                await Lobbies.Instance.RemovePlayerAsync(_lobby.Id, AuthenticationService.Instance.PlayerId);
+                print("[NetworkConnectionManager] Exited Lobby...");
+            }
+            catch (Exception error)
+            {
+                print($"Error Leaving Lobby: {error.Message}");
+            }
+        }
+        AuthenticationService.Instance.SignOut(true);
+        print("[NetworkConnectionManager] Signed Out...");
+        NetworkManager.Singleton?.Shutdown();
+        print("[NetworkConnectionManager] Shut Down Network Manager...");
     }
 
-    void OnApplicationQuit()
+    void OnApplicationQuit() => LogOff();
+    public override void OnDestroy() => LogOff();
+
+    [ContextMenu("Ping")]
+    void Ping()
     {
-        LogOff();
+        print($"Time Diff: {NetworkManager.Singleton.LocalTime.TimeAsFloat - NetworkManager.Singleton.ServerTime.TimeAsFloat}");
+        print($"Current RTT: {NetworkManager.Singleton.gameObject.GetComponent<UnityTransport>().GetCurrentRtt(0)}");
     }
 
 }

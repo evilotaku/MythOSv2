@@ -4,16 +4,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using ReadyPlayerMe;
 using Unity.Netcode;
+using Cinemachine;
+using UnityEngine.InputSystem;
 
 public class PlayerAvatar : NetworkBehaviour
-{
-    public string AvatarURL;
-    public Gender Gender;
-    public NetworkVariable<PlayerData> data = new NetworkVariable<PlayerData>();
-    AvatarLoader avatarLoader;
+{   
+    public NetworkVariable<PlayerData> data = new();
+    [SerializeField] private Transform PlayerCameraRoot;
 
+    AvatarLoader avatarLoader;
     SkinnedMeshRenderer[] renderers;
-    public bool isLoaded = false;
+    bool isLoaded = false;
+    
 
     void Awake()
     {
@@ -21,35 +23,38 @@ public class PlayerAvatar : NetworkBehaviour
         data.OnValueChanged += OnDataChange;
         avatarLoader.OnCompleted += OnAvatarLoaded;
         renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
-        if(string.IsNullOrEmpty(AvatarURL)) return; 
-        Load(AvatarURL); 
     }
     public override void OnNetworkSpawn()
     {
-        print("OnNetworkSpawn...");
+        if (isLoaded) return;
+        print("[Player Avatar] has spawned");
         renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
-        if(string.IsNullOrEmpty(AvatarURL)) return; 
-        Load(data.Value.AvatarURL.ToString()); 
+        if (string.IsNullOrEmpty(data.Value.AvatarURL)) return;
+        Load(data.Value.AvatarURL.ToString());
+        isLoaded = true;
+
+        if (!IsLocalPlayer) return;
+       
+        print("[Player Avatar] has Set 3rd Person Camera");
+        FindObjectOfType<CinemachineVirtualCamera>().Follow = PlayerCameraRoot;
+        GetComponent<PlayerInput>().enabled = true;
+        GetComponent<CharacterController>().enabled = true;
     }
 
     void OnDataChange(PlayerData oldValue, PlayerData newValue)
     {
-        print("OnDataChange to new value " + newValue.AvatarURL.ToString());
-        var url = newValue.AvatarURL.ToString();
-        if(string.IsNullOrEmpty(url)) return; 
-        AvatarURL = url; 
-        Load(AvatarURL);   
+        print("[Player Avatar] Data has changed to " + newValue.AvatarURL.ToString());
+        Load(newValue.AvatarURL.ToString());
     }
 
     public void Load(string _url)
-    {        
-        
+    {                
         if(isLoaded) return; 
-        print("Loading...");
-        avatarLoader.LoadAvatar(_url); //, (avatar)=>{avatar.SetActive(false);}, OnAvatarLoaded);
+        print("[Player Avatar] Loading Avatar...");
+        avatarLoader.LoadAvatar(_url); 
     }
 
-    private void OnAvatarLoaded(object _, CompletionEventArgs args)
+    private void OnAvatarLoaded(object sender, CompletionEventArgs args)
     {
         args.Avatar.SetActive(false);
         var newRenderers = args.Avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true);
@@ -57,14 +62,10 @@ public class PlayerAvatar : NetworkBehaviour
         {
             renderers[i].sharedMesh = newRenderers[i].sharedMesh;
             renderers[i].material = newRenderers[i].material;
+            if(!IsOwner)
+                renderers[i].gameObject.layer = 0;
         }
         Destroy(args.Avatar);
         isLoaded = true;
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
     }
 }

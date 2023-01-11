@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 5409699358540827314}
   - component: {fileID: 5409699358540827313}
   - component: {fileID: 110466617}
+  - component: {fileID: 1915452725}
   m_Layer: 0
   m_Name: Avatar Manager
   m_TagString: Untagged
@@ -32,7 +33,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 3
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5409699358540827314
 MonoBehaviour:
@@ -67,7 +68,7 @@ MonoBehaviour:
   AvatarBase:
   - {fileID: 5790153776749235768, guid: d7aec735300afeb4ca2e9bb9603fa876, type: 3}
   - {fileID: 7905237527146243069, guid: 186a4926501b2f545800920b5c632e5f, type: 3}
-  Test: 1
+  Test: 0
 --- !u!114 &110466617
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -81,5 +82,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   CharacterPrefabs:
-  - {fileID: -6598806113491773598, guid: a358598355826b94ca04966caad4ccd4, type: 3}
-  - {fileID: 751355464944628312, guid: 186a4926501b2f545800920b5c632e5f, type: 3}
+  - {fileID: 7905237527146243069, guid: 186a4926501b2f545800920b5c632e5f, type: 3}
+  - {fileID: 4986143738923554043, guid: a358598355826b94ca04966caad4ccd4, type: 3}
+--- !u!114 &1915452725
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5409699358540827315}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e59b398dba854c4fa1c4547f09eee9b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  VoiceChat: 0
+  Test: 1

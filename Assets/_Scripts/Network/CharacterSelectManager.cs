@@ -5,40 +5,33 @@ using Unity.Netcode;
 using System;
 using Unity.VisualScripting;
 using UnityEngine.SceneManagement;
+using Unity.Netcode.Transports.UTP;
 
 public class CharacterSelectManager : NetworkBehaviour
 {
 
     public List<GameObject> CharacterPrefabs;
-    public int _characterIndex;
+    int _characterIndex;
+    bool _loaded = false;
 
-    private void Start()
+
+    public override void OnNetworkSpawn()
     {        
-        NetworkManager.OnClientConnectedCallback += ClientConnection;  
-        DontDestroyOnLoad(gameObject);
-    }
-
-    public void SetPlayerPrefabIndex(int index)
-    {
-        if (index > CharacterPrefabs.Count) return;
-        if (NetworkManager.IsListening || IsSpawned) return;
-
-        NetworkManager.NetworkConfig.ConnectionData = System.BitConverter.GetBytes(index);
-        _characterIndex = index;
-        print($"Selected Character {index + 1}");
-    }
-
-    void ClientConnection(ulong clientID)
-    {        
-        print($"Client {clientID} has connected");
+        if (_loaded) return;               
         SpawnPlayerObjectServerRPC(_characterIndex);
+        _loaded = true;
     }
 
-    [ServerRpc]
+    public void SetPlayerPrefabIndex(int index) => _characterIndex = index;
+
+
+    [ServerRpc(RequireOwnership = false)]
     void SpawnPlayerObjectServerRPC(int index, ServerRpcParams param = default)
     {
-        print($"Spawning Character {_characterIndex} for Player {param.Receive.SenderClientId}");
-        Instantiate(CharacterPrefabs[_characterIndex])
+        var pos = UnityEngine.Random.insideUnitCircle;
+        Instantiate(CharacterPrefabs[index],
+            new Vector3(pos.x, 0, pos.y),
+            Quaternion.LookRotation(-new Vector3(pos.x, 0, pos.y)))
                 .GetComponent<NetworkObject>()
                 .SpawnAsPlayerObject(param.Receive.SenderClientId);
     }
@@ -47,5 +40,6 @@ public class CharacterSelectManager : NetworkBehaviour
     {
 
     }
+   
 
 }

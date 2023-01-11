@@ -7,19 +7,23 @@ using System.Text;
 using Unity.Collections;
 using System;
 using Newtonsoft.Json;
+using Unity.Netcode.Transports.UTP;
+using ReadyPlayerMe;
 
 [Serializable]
 public struct PlayerData : INetworkSerializable,IEquatable<PlayerData>
 {
     public ulong ClientId;
     public string AvatarURL;
-    public int Gender;
+    public OutfitGender Gender;
+    public bool IsVR;
 
     public bool Equals(PlayerData other)
     {
         return ClientId == other.ClientId && 
                AvatarURL == other.AvatarURL &&
-               Gender == other.Gender;
+               Gender == other.Gender &&
+               IsVR == other.IsVR;
     }
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
@@ -27,141 +31,92 @@ public struct PlayerData : INetworkSerializable,IEquatable<PlayerData>
         serializer.SerializeValue(ref ClientId);
         serializer.SerializeValue(ref AvatarURL);
         serializer.SerializeValue(ref Gender);
+        serializer.SerializeValue(ref IsVR);
     }
 }
-public enum Gender
-{
-    Male = 0,
-    Female = 1
-}
 public class AvatarManger : NetworkBehaviour
-{    
-    public string AvatarURL;
-    public Gender Gender;
+{
+    [SerializeField] private PlayerData LocalPlayer;
     [NonReorderable]
-    public GameObject[] AvatarBase;
-    //public NetworkList<PlayerData> AvatarList;
+    [SerializeField] private GameObject[] VRAvatarBase;
+    [NonReorderable]
+    [SerializeField] private GameObject[] ThirdPersonAvatarBase;
     List<PlayerData> PlayerList = new();
-    PlayerData _localPlayerData, _remotePlayerData;
 
-    public bool Test;
+    [SerializeField] private bool Test;
 
-    void Awake()
-    {
-        //AvatarList = new NetworkList<PlayerData>();
-    }    
+    AvatarLoader loader;
 
-    // Start is called before the first frame update
+   
     void Start()
     {
-        
+        loader = new();
+        loader.OnCompleted += Loader_OnCompleted;
         NetworkManager.Singleton.OnClientConnectedCallback += OnConnection;
         NetworkManager.Singleton.ConnectionApprovalCallback += ApprovalCheck;
+        loader.LoadAvatar(LocalPlayer.AvatarURL);        
 
-        var data = _localPlayerData = new PlayerData
-                                    {
-                                        AvatarURL = this.AvatarURL,
-                                        Gender = (int)this.Gender
-                                    };
-        var dataJson = JsonConvert.SerializeObject(data);
-        print($"Serializing {dataJson}");
+    }
+
+    private void Loader_OnCompleted(object sender, CompletionEventArgs e)
+    {
+        Destroy(e.Avatar);
+        LocalPlayer.Gender = e.Metadata.OutfitGender;
+
+        var dataJson = JsonConvert.SerializeObject(LocalPlayer);
+        print($"[Avatar Manager] is Serializing {dataJson}");
         NetworkManager.Singleton.NetworkConfig.ConnectionData = Encoding.ASCII.GetBytes(dataJson);
-
-        if (Test) NetworkManager.Singleton.StartHost();
-
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        print($"Avatar Manager is spawned...");        
-        /*if (IsClient) AvatarList.OnListChanged += AvatarListChanged;
-        if(IsServer)
-        {
-            AvatarList.OnListChanged += AvatarListChanged;            
-        }*/
+        print($"[Avatar Manager] is spawned...");   
     }
 
     void OnGetAvatarURL(string url)
     {
-        AvatarURL = url;
+        LocalPlayer.AvatarURL = url;
     }
 
     void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
     {
-        NetworkObject.Spawn();        
+        print("[Avatar Manager] Connection Approval...");
+        //NetworkObject.Spawn();        
         var json = Encoding.ASCII.GetString(request.Payload);
-        print($"recieved: {json}");
+        print($"[Avatar Manager] recieved: {json}");
         PlayerData newPlayer = JsonConvert.DeserializeObject<PlayerData>(json);        
         newPlayer.ClientId = request.ClientNetworkId;
         PlayerList.Add(newPlayer);
-        //AvatarList.Add(newPlayer);
-        _remotePlayerData = newPlayer;
 
         response.CreatePlayerObject = false;
         response.PlayerPrefabHash = null;
         response.Approved = true;
         response.Pending = false;
-        //callback(createPlayerObject: false, playerPrefabHash: null,approved: true, position:Vector3.zero, rotation: Quaternion.identity);
     }
-
-    /*void AvatarListChanged(NetworkListEvent<PlayerData> evt)
-    {
-        print("Avatar List has Changed... " + evt.Type.ToString());
-        
-        Action x = evt.Type switch
-        {       
-            NetworkListEvent<PlayerData>.EventType.Add =>()=>
-            {
-                if(!IsServer || !IsHost) return;
-                print("New Player added to List...");
-                var pos = UnityEngine.Random.insideUnitCircle;
-                var newPlayer = Instantiate(AvatarBase[(int)Gender], new Vector3(pos.x, 0, pos.y), Quaternion.LookRotation(-pos));
-                newPlayer.GetComponent<PlayerAvatar>().data.Value = evt.Value;
-                newPlayer.GetComponent<NetworkObject>().SpawnAsPlayerObject(evt.Value.ClientId);
-                return;
-            },
-            NetworkListEvent<PlayerData>.EventType.Full =>() =>
-            {
-                print("Full List Update..");
-                LoadAvatars();
-            },
-            _ => null
-        };
-        x.Invoke();
-        
-    }*/
-
     
     void ReLoadAvatars()
     {
-        print("Reloading all Avatars...");
+        print("[Avatar Manager] is Reloading all Avatars...");
         if(IsServer) return;
         foreach (var player in PlayerList)
         {
             NetworkManager.Singleton.ConnectedClients[player.ClientId]
-                                    .PlayerObject.GetComponent<PlayerAvatar>()
-                                    .data.Value = player;
-                                    
+                            .PlayerObject.GetComponent<PlayerAvatar>()
+                            .data.Value = player;
         }
     }
     void OnConnection(ulong _clientID)
     {   
-        if (NetworkManager.Singleton.IsHost)
+        if (NetworkManager.Singleton.IsServer)
         {
-            var pos = UnityEngine.Random.insideUnitCircle;
-            var newPlayer = Instantiate(AvatarBase[(int)Gender], new Vector3(pos.x, 0, pos.y), Quaternion.LookRotation(-new Vector3(pos.x, 0, pos.y)));
-            newPlayer.GetComponent<PlayerAvatar>().data.Value = PlayerList[(int)_clientID];
+            var player = PlayerList[(int)_clientID];
+            var prefab = player.IsVR ? VRAvatarBase[(int)player.Gender - 1] : ThirdPersonAvatarBase[(int)player.Gender - 1];
+            var pos = UnityEngine.Random.insideUnitCircle; 
+            var newPlayer = Instantiate(prefab, new Vector3(pos.x, 0, pos.y), Quaternion.LookRotation(-new Vector3(pos.x, 0, pos.y)));
+            newPlayer.GetComponent<PlayerAvatar>().data.Value = player;
+            print("[Avatar Manager] is Spawning Player Avatar...");
             newPlayer.GetComponent<NetworkObject>().SpawnAsPlayerObject(_clientID);
-
         }
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    }    
 }
-
-
