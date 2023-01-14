@@ -75,7 +75,7 @@ public class NetworkConnectionManager : NetworkBehaviour
                                 )
             };
 
-            options.Player = new Player();
+            options.Player = new();
             Debug.Log($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
             _lobby = await Lobbies.Instance.QuickJoinLobbyAsync(options);
             print($"Joined Lobby: {_lobby.Name}");
