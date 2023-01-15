@@ -1,8 +1,20 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using Unity.VisualScripting.FullSerializer;
+using Unity.Netcode;
 using UnityEngine;
+
+
+public struct NetCard : INetworkSerializable
+{
+    public int ID;
+    public int Quantity;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref ID);
+        serializer.SerializeValue(ref Quantity);
+    }
+}
 
 [CreateAssetMenu(menuName = "Cards")]
 public class CardData : ScriptableObject

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using Unity.Netcode;
 
 public enum TurnPhase
 {
@@ -14,7 +15,7 @@ public enum TurnPhase
     Discard,
     Draw
 }
-public class CardGameManager : MonoBehaviour
+public class CardGameManager : NetworkBehaviour
 {
     public static event Action<int> OnUpkeep, OnPlay, OnCombat, OnDiscard, OnDraw, OnEndTurn;
     public static event Action<float> StartPlayTimer, StartDiscardTimer;
@@ -52,7 +53,7 @@ public class CardGameManager : MonoBehaviour
         OnDraw -= DrawPhase;
     }
 
-    private void Start() => StartGame();
+    //private void Start() => StartGame();
 
 
     void StartGame()

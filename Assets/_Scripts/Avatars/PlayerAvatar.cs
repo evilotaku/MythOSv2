@@ -2,24 +2,24 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using ReadyPlayerMe;
+using ReadyPlayerMe.AvatarLoader;
 using Unity.Netcode;
 using Cinemachine;
 using UnityEngine.InputSystem;
 
 public class PlayerAvatar : NetworkBehaviour
-{   
+{
     public NetworkVariable<PlayerData> data = new();
     [SerializeField] private Transform PlayerCameraRoot;
 
-    AvatarLoader avatarLoader;
+    AvatarObjectLoader avatarLoader;
     SkinnedMeshRenderer[] renderers;
     bool isLoaded = false;
-    
+
 
     void Awake()
     {
-        avatarLoader = new AvatarLoader();
+        avatarLoader = new AvatarObjectLoader();
         data.OnValueChanged += OnDataChange;
         avatarLoader.OnCompleted += OnAvatarLoaded;
         renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
@@ -34,7 +34,7 @@ public class PlayerAvatar : NetworkBehaviour
         isLoaded = true;
 
         if (!IsLocalPlayer) return;
-       
+
         print("[Player Avatar] has Set 3rd Person Camera");
         FindObjectOfType<CinemachineVirtualCamera>().Follow = PlayerCameraRoot;
         GetComponent<PlayerInput>().enabled = true;
@@ -43,15 +43,17 @@ public class PlayerAvatar : NetworkBehaviour
 
     void OnDataChange(PlayerData oldValue, PlayerData newValue)
     {
+        if (oldValue.AvatarURL == newValue.AvatarURL) return;
+        isLoaded = false;
         print("[Player Avatar] Data has changed to " + newValue.AvatarURL.ToString());
         Load(newValue.AvatarURL.ToString());
     }
 
     public void Load(string _url)
-    {                
-        if(isLoaded) return; 
+    {
+        if (isLoaded) return;
         print("[Player Avatar] Loading Avatar...");
-        avatarLoader.LoadAvatar(_url); 
+        avatarLoader.LoadAvatar(_url);
     }
 
     private void OnAvatarLoaded(object sender, CompletionEventArgs args)
@@ -62,7 +64,7 @@ public class PlayerAvatar : NetworkBehaviour
         {
             renderers[i].sharedMesh = newRenderers[i].sharedMesh;
             renderers[i].material = newRenderers[i].material;
-            if(!IsOwner)
+            if (!IsOwner)
                 renderers[i].gameObject.layer = 0;
         }
         Destroy(args.Avatar);

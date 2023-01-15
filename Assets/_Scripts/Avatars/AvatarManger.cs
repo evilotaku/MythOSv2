@@ -1,17 +1,14 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using System.Linq;
 using System.Text;
-using Unity.Collections;
 using System;
 using Newtonsoft.Json;
-using Unity.Netcode.Transports.UTP;
-using ReadyPlayerMe;
+using ReadyPlayerMe.AvatarLoader;
+
 
 [Serializable]
-public struct PlayerData : INetworkSerializable,IEquatable<PlayerData>
+public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
 {
     public ulong ClientId;
     public string AvatarURL;
@@ -20,7 +17,7 @@ public struct PlayerData : INetworkSerializable,IEquatable<PlayerData>
 
     public bool Equals(PlayerData other)
     {
-        return ClientId == other.ClientId && 
+        return ClientId == other.ClientId &&
                AvatarURL == other.AvatarURL &&
                Gender == other.Gender &&
                IsVR == other.IsVR;
@@ -45,16 +42,16 @@ public class AvatarManger : NetworkBehaviour
 
     [SerializeField] private bool Test;
 
-    AvatarLoader loader;
+    AvatarObjectLoader loader;
 
-   
+
     void Start()
     {
         loader = new();
         loader.OnCompleted += Loader_OnCompleted;
         NetworkManager.Singleton.OnClientConnectedCallback += OnConnection;
         NetworkManager.Singleton.ConnectionApprovalCallback += ApprovalCheck;
-        loader.LoadAvatar(LocalPlayer.AvatarURL);        
+        loader.LoadAvatar(LocalPlayer.AvatarURL);
 
     }
 
@@ -71,7 +68,7 @@ public class AvatarManger : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        print($"[Avatar Manager] is spawned...");   
+        print($"[Avatar Manager] is spawned...");
     }
 
     void OnGetAvatarURL(string url)
@@ -85,7 +82,7 @@ public class AvatarManger : NetworkBehaviour
         //NetworkObject.Spawn();        
         var json = Encoding.ASCII.GetString(request.Payload);
         print($"[Avatar Manager] recieved: {json}");
-        PlayerData newPlayer = JsonConvert.DeserializeObject<PlayerData>(json);        
+        PlayerData newPlayer = JsonConvert.DeserializeObject<PlayerData>(json);
         newPlayer.ClientId = request.ClientNetworkId;
         PlayerList.Add(newPlayer);
 
@@ -94,11 +91,11 @@ public class AvatarManger : NetworkBehaviour
         response.Approved = true;
         response.Pending = false;
     }
-    
+
     void ReLoadAvatars()
     {
         print("[Avatar Manager] is Reloading all Avatars...");
-        if(IsServer) return;
+        if (IsServer) return;
         foreach (var player in PlayerList)
         {
             NetworkManager.Singleton.ConnectedClients[player.ClientId]
@@ -107,16 +104,16 @@ public class AvatarManger : NetworkBehaviour
         }
     }
     void OnConnection(ulong _clientID)
-    {   
+    {
         if (NetworkManager.Singleton.IsServer)
         {
             var player = PlayerList[(int)_clientID];
             var prefab = player.IsVR ? VRAvatarBase[(int)player.Gender - 1] : ThirdPersonAvatarBase[(int)player.Gender - 1];
-            var pos = UnityEngine.Random.insideUnitCircle; 
+            var pos = UnityEngine.Random.insideUnitCircle;
             var newPlayer = Instantiate(prefab, new Vector3(pos.x, 0, pos.y), Quaternion.LookRotation(-new Vector3(pos.x, 0, pos.y)));
             newPlayer.GetComponent<PlayerAvatar>().data.Value = player;
             print("[Avatar Manager] is Spawning Player Avatar...");
             newPlayer.GetComponent<NetworkObject>().SpawnAsPlayerObject(_clientID);
         }
-    }    
+    }
 }
