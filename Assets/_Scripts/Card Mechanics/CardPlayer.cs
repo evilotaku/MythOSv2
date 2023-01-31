@@ -3,54 +3,58 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using Unity.Netcode;
 
-public class CardPlayer : MonoBehaviour
+public class CardPlayer : NetworkBehaviour
 {
     public int Id;
     public string DisplayName;
     public bool isAI;
     public bool isActive;
 
+    public PlayerUI PlayerUI;
     public Deck DrawDeck;
     public Deck DiscardDeck;
-    public List<CardData> Hand;
+    public List<int> Hand;
     public Transform HandLocation;
     public int MaxHandSize, Resources;
 
     Card cardPrefab;
+    CardDB CardDB;
 
     public Lane[] lanes = new Lane[5];
 
-    public CardPlayer Opponent;
+    //public CardPlayer Opponent;
 
-    public static event Action<Card, int> PlayCard; 
+    public static event Action<int, int> PlayCard;
 
-    public void Start()
+
+    public override void OnNetworkSpawn()
     {
-        Id = Array.IndexOf(CardGameManager.Instance.players, this);
-        cardPrefab = CardGameManager.Instance.CardPrefab.GetComponent<Card>();
-        ShuffleDeck(DrawDeck);
-        Hand = DrawHand(MaxHandSize);
-        DisplayHand(Hand,HandLocation);
+        base.OnNetworkSpawn();
+
+        Id = Array.IndexOf(CardGameManager.Instance.players, this);      
+        CardDB = CardGameManager.Instance.CardsDB;
+        cardPrefab = CardDB.CardPrefab.GetComponent<Card>();
     }
 
     public void ShuffleDeck(Deck _deck)
     {
-        _deck.Shuffle();
+        _deck.ShuffleServerRpc();
     }
     public void StartTurn()
     {
 
     }
 
-    List<CardData> DrawHand(int HandSize)
+    List<int> DrawHand(int HandSize)
     {
         int numCards = HandSize - Hand.Count;
         if(numCards > DrawDeck.cards.Count)
         {
             numCards = DrawDeck.cards.Count;
         }
-        var tmp = new List<CardData>();
+        var tmp = new List<int>();
         for (int i = 0; i < numCards; i++)
         {
             tmp.Add(DrawDeck.Draw());
@@ -59,48 +63,55 @@ public class CardPlayer : MonoBehaviour
         return tmp;
     }
 
-    void DisplayHand(List<CardData> hand, Transform location)
+    [ClientRpc]
+    void DisplayHandClientRpc(int[] hand)
     {        
         int i = 0;
-        foreach (var card in location.GetComponentsInChildren<Card>())
+        foreach (var card in HandLocation.GetComponentsInChildren<Card>())
         {
             Destroy(card?.gameObject);
         }
         foreach (var card in hand)
         {
-            var tmp = Instantiate(cardPrefab,location);
-            tmp.data = card;
+            var tmp = Instantiate(cardPrefab, HandLocation);
+            tmp.data = CardDB.CardByID(card);
             tmp.owner = this;
             tmp.transform.Translate(i++ * Vector3.right);
         }
     }
 
-    public async void Play(Card card, int LaneId)
+    [ServerRpc]
+    public void PlayServerRpc(int cardId, int LaneId)
     {
-        lanes[LaneId].card = card;        
-        Hand.Remove(card.data);
-        DisplayHand(Hand, HandLocation);
-        card.transform.SetParent(lanes[LaneId].transform, false);
-        await card.OnPlay();
-        PlayCard.Invoke(card, LaneId);
+        Play(cardId, LaneId);
     }
 
-    public void PitchForResource(Card card)
+    public async void Play(int cardId, int LaneId)
+    {
+        lanes[LaneId].card = CardDB.CardByID(cardId);         
+        Hand.Remove(cardId);
+        DisplayHandClientRpc(Hand.ToArray());
+        //card.transform.SetParent(lanes[LaneId].transform, false);
+        await lanes[LaneId].card.OnPlay();
+        PlayCard.Invoke(cardId, LaneId);
+    }
+
+    public void PitchForResource(int cardId)
     {        
-        DiscardFromHand(card);
+        DiscardFromHand(cardId);
         foreach (var _card in HandLocation.GetComponentsInChildren<Card>())
         {
             if(Resources >= _card.data.Cost)
-                _card.state = Card.State.Playable;
+                _card.data.state = CardData.State.Playable;
         }
     }
 
-    public void DiscardFromHand(Card card)
+    public void DiscardFromHand(int cardId)
     {
-        DiscardDeck.cards.Insert(0,card.data);
-        Hand.Remove(card.data);
-        DisplayHand(Hand, HandLocation);
-        card.gameObject.transform.SetParent(DiscardDeck.gameObject.transform,false);
+        DiscardDeck.NetDeck.Insert(0, cardId);
+        Hand.Remove(cardId);
+        DisplayHandClientRpc(Hand.ToArray());
+        //card.gameObject.transform.SetParent(DiscardDeck.gameObject.transform,false);
         //or Destroy(card.gameobject);
     }
 
@@ -116,7 +127,7 @@ public class CardPlayer : MonoBehaviour
         {
             var card = lane.GetComponent<Card>();
             card.UpdateCard();
-            if(card.state == Card.State.Dead)
+            if(card.data.state == CardData.State.Dead)
             {
                 card.gameObject.transform.SetParent(DiscardDeck.gameObject.transform,false);
             }

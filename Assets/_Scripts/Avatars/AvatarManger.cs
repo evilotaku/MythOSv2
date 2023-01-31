@@ -5,30 +5,43 @@ using System.Text;
 using System;
 using Newtonsoft.Json;
 using ReadyPlayerMe.AvatarLoader;
-
+using Newtonsoft.Json.Serialization;
 
 [Serializable]
 public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
 {
     public ulong ClientId;
+    public string DisplayName;
     public string AvatarURL;
     public OutfitGender Gender;
     public bool IsVR;
+    public int[] Deck;
 
     public bool Equals(PlayerData other)
     {
         return ClientId == other.ClientId &&
+               DisplayName == other.DisplayName && 
                AvatarURL == other.AvatarURL &&
                Gender == other.Gender &&
-               IsVR == other.IsVR;
+               IsVR == other.IsVR &&
+               Deck == other.Deck;
     }
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
+        int length = 0;
+        if (!serializer.IsReader) length = Deck.Length;
         serializer.SerializeValue(ref ClientId);
+        serializer.SerializeValue(ref DisplayName);
         serializer.SerializeValue(ref AvatarURL);
         serializer.SerializeValue(ref Gender);
         serializer.SerializeValue(ref IsVR);
+        serializer.SerializeValue(ref length);
+        if (serializer.IsReader) Deck = new int[length];
+        for (int i = 0; i < length; ++i)
+        {
+            serializer.SerializeValue(ref Deck[i]);
+        }
     }
 }
 public class AvatarManger : NetworkBehaviour
@@ -44,15 +57,26 @@ public class AvatarManger : NetworkBehaviour
 
     AvatarObjectLoader loader;
 
+    private void Awake()
+    {               
+        loader = new();
+        loader.OnCompleted += Loader_OnCompleted;
+        LobbyPlayer.LoadPlayer += OnPlayerLoaded;
+    }
 
     void Start()
     {
-        loader = new();
-        loader.OnCompleted += Loader_OnCompleted;
+        print("[AvatarManager] Started...");
         NetworkManager.Singleton.OnClientConnectedCallback += OnConnection;
         NetworkManager.Singleton.ConnectionApprovalCallback += ApprovalCheck;
-        loader.LoadAvatar(LocalPlayer.AvatarURL);
+    }
 
+    private void OnPlayerLoaded(string name, List<int> _netdeck)
+    {
+        print($"Deck loaded...{string.Join(", ", _netdeck)}");
+        LocalPlayer.Deck = _netdeck.ToArray();
+        LocalPlayer.DisplayName = name;
+        loader.LoadAvatar(LocalPlayer.AvatarURL);
     }
 
     private void Loader_OnCompleted(object sender, CompletionEventArgs e)

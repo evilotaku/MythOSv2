@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.Netcode;
+using System.Linq;
+using Unity.Collections.LowLevel.Unsafe;
 
 public enum TurnPhase
 {
@@ -17,7 +19,7 @@ public enum TurnPhase
 }
 public class CardGameManager : NetworkBehaviour
 {
-    public static event Action<int> OnUpkeep, OnPlay, OnCombat, OnDiscard, OnDraw, OnEndTurn;
+    public static event Action<int> OnStartGame, OnUpkeep, OnPlay, OnCombat, OnDiscard, OnDraw, OnEndTurn;
     public static event Action<float> StartPlayTimer, StartDiscardTimer;
     public static CardGameManager Instance;
     public GameObject CardPrefab;
@@ -26,21 +28,27 @@ public class CardGameManager : NetworkBehaviour
     public static TurnPhase currentPhase = 0;
     public CardPlayer[] players;
     public int ActivePlayerID;
+    public CardDB CardsDB;
+    public PlayerUI PlayerUI;
 
     bool FirstTurn = true;
 
     void Awake()
     {
         if(!Instance) Instance = this;
+        CardsDB.GetAllCards();
+        PlayerUI.PlayTimer = PlayTimer;
     }
+    
 
     void OnEnable()
     {
-        OnUpkeep += UpkeepPhase;
+        OnStartGame += StartGame;
+        OnUpkeep += UpkeepPhase;    // Start of Turn
         OnPlay += PlayPhase;
         OnCombat += CombatPhase;
         OnDiscard += DiscardPhase;
-        OnDraw += DrawPhase;
+        OnDraw += DrawPhase;        // End of Turn
         print("Actions subbed...");
     }   
 
@@ -56,12 +64,12 @@ public class CardGameManager : NetworkBehaviour
     //private void Start() => StartGame();
 
 
-    void StartGame()
+    void StartGame(int FirstPlayer)
     {
         print($"Starting Game...");
         //Select 1st player
-        ActivePlayerID = UnityEngine.Random.Range(0,players.Length);
-        players[ActivePlayerID].isActive = true;
+        //ActivePlayerID = UnityEngine.Random.Range(0,players.Length);
+        players[FirstPlayer].isActive = true;
         NextTurnPhase();
     }
 
@@ -76,6 +84,9 @@ public class CardGameManager : NetworkBehaviour
             currentPhase = TurnPhase.Play;
             FirstTurn = false;
         }
+
+        PlayerUI.DisplayName = players[ActivePlayerID].DisplayName;
+        PlayerUI.PhaseName = currentPhase.ToString();
 
         var action = currentPhase switch
         {

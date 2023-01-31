@@ -36,7 +36,7 @@ public class DragAndDrop : MonoBehaviour, IBeginDragHandler, IEndDragHandler, ID
                 if(!_selectedCard.owner.isActive) return;
                 if(rb != null) StartCoroutine(DragUpdate(rb));
                 hit.collider.TryGetComponent<Card>(out _selectedCard);
-                if(_selectedCard != null) _selectedCard.state = Card.State.Selected;
+                if(_selectedCard != null) _selectedCard.data.state = CardData.State.Selected;
             }
         }
     }

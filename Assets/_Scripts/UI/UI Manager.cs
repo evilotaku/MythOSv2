@@ -10,6 +10,8 @@ public class UIManager : MonoBehaviour
 {
     public TextMeshProUGUI PhaseText, ActivePlayer;
     public Slider PhaseTimer;
+    public PlayerUI PlayerUI;
+    public CardDB CardDB;
 
     void OnEnable()
     {
@@ -22,18 +24,18 @@ public class UIManager : MonoBehaviour
 
     async void UpdateUI(int playerIndex)
     {
-        ActivePlayer.text = CardGameManager.Instance.players[playerIndex].DisplayName;
-        PhaseText.text = CardGameManager.currentPhase.ToString();
+        ActivePlayer.text = PlayerUI.DisplayName;
+        PhaseText.text = PlayerUI.PhaseName;
         await Timer();
     }
 
     async Task Timer()
     {
-        await CardGameManager.Instance.Timer(CardGameManager.Instance.PlayTimer, new Progress<float>(percent =>
+        await PlayerUI.Timer(PlayerUI.PlayTimer, new Progress<float>(percent =>
         {
             print($"Timer: {percent} ");
             PhaseTimer.value = percent;
-        }), CardGameManager.Instance.cancelSource.Token);
+        }), PlayerUI.cancelSource.Token);
     }
 
     void OnDisable()

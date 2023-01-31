@@ -46,12 +46,12 @@ public class NetworkConnectionManager : NetworkBehaviour
         AuthenticationService.Instance.SignOut(true);
         await AuthenticationService.Instance.SignInAnonymouslyAsync();
 
-        print($"Logged in as {AuthenticationService.Instance.PlayerId} ");
+        print($"[NetworkConnectionManager] Logged in as {AuthenticationService.Instance.PlayerId} ");
         VivoxService.Instance.Initialize();
 
-        Debug.Log($"Is SignedIn: {AuthenticationService.Instance.IsSignedIn}");
-        Debug.Log($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
-        Debug.Log($"Is Expired: {AuthenticationService.Instance.IsExpired}");
+        Debug.Log($"[NetworkConnectionManager] Is SignedIn: {AuthenticationService.Instance.IsSignedIn}");
+        Debug.Log($"[NetworkConnectionManager] Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
+        Debug.Log($"[NetworkConnectionManager] Is Expired: {AuthenticationService.Instance.IsExpired}");
 
 
     }
@@ -76,9 +76,9 @@ public class NetworkConnectionManager : NetworkBehaviour
             };
 
             options.Player = new();
-            Debug.Log($"Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
+            Debug.Log($"[NetworkConnectionManager] Is Authorized: {AuthenticationService.Instance.IsAuthorized}");
             _lobby = await Lobbies.Instance.QuickJoinLobbyAsync(options);
-            print($"Joined Lobby: {_lobby.Name}");
+            print($"[NetworkConnectionManager] Joined Lobby: {_lobby.Name}");
             _relayCode = _lobby.Data["RelayCode"].Value;            
             StartClient();
         }
@@ -90,7 +90,7 @@ public class NetworkConnectionManager : NetworkBehaviour
 
         if(VoiceChat)
         {
-            print("Logging into Vivox Voice Chat...");
+            print("[NetworkConnectionManager] Logging into Vivox Voice Chat...");
             VivoxLogin();
         }
 
@@ -129,7 +129,7 @@ public class NetworkConnectionManager : NetworkBehaviour
         // When connecting as a client to a Relay server, connectionData and hostConnectionData are different.
         NetworkManager.Singleton.GetComponent<UnityTransport>().SetRelayServerData(relayData);
 
-        print($"Starting Client on {relayData.Endpoint.Address} : {relayData.Endpoint.Port}");
+        print($"[NetworkConnectionManager] Starting Client on {relayData.Endpoint.Address} : {relayData.Endpoint.Port}");
         NetworkManager.Singleton.StartClient();
         await Task.Yield();
     }
@@ -156,7 +156,7 @@ public class NetworkConnectionManager : NetworkBehaviour
 
     public void OnServerStart()
     {
-        print("Server Started...");
+        print("[NetworkConnectionManager] Server Started...");
         NetworkManager.SceneManager.LoadScene("SampleScene", LoadSceneMode.Single);
     }
 
@@ -225,7 +225,7 @@ public class NetworkConnectionManager : NetworkBehaviour
     {
         try
         {
-            print("Creating Lobby...");
+            print("[NetworkConnectionManager] Creating Lobby...");
             CreateLobbyOptions options = new CreateLobbyOptions();
             options.IsPrivate = false;
             options.Data = new Dictionary<string, DataObject>()

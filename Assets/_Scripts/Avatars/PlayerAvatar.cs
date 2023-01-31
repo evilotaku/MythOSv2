@@ -20,10 +20,13 @@ public class PlayerAvatar : NetworkBehaviour
     void Awake()
     {
         avatarLoader = new AvatarObjectLoader();
+        renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
         data.OnValueChanged += OnDataChange;
         avatarLoader.OnCompleted += OnAvatarLoaded;
-        renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
+        
+        
     }
+
     public override void OnNetworkSpawn()
     {
         if (isLoaded) return;

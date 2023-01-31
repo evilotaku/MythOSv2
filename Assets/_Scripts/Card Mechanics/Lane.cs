@@ -5,9 +5,7 @@ using UnityEngine.EventSystems;
 
 public class Lane : MonoBehaviour, IDropHandler
 {
-    public Card card;
-
-
+    public CardData card;
 
     public void OnDrop(PointerEventData eventData)
     {
